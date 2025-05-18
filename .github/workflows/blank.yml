@@ -1,0 +1,37 @@
+name: SSH Test Server (No Docker)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-ssh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install SSH server
+        run: |
+          sudo apt update
+          sudo apt install -y openssh-server
+          echo 'root:123456' | sudo chpasswd
+          sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+
+      - name: Download and start ngrok
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update && sudo apt install -y ngrok
+
+          # Start ngrok tunnel for port 22
+          ngrok config add-authtoken 2ULlZeaFoXx7Kqk7kcYMlsel5JO_3mMWSwcCzs7uL4jtRaQ44
+          nohup ngrok tcp 22 > ngrok.log &
+
+      - name: Wait and print SSH command
+        run: |
+          sleep 5
+          SSH_LINE=$(curl -s localhost:4040/api/tunnels | grep -o 'tcp://[0-9a-zA-Z\.:\-]*')
+          HOSTPORT=${SSH_LINE#tcp://}
+          echo "🔐 SSH command to connect:"
+          echo "ssh root@${HOSTPORT}"
+          echo "Password: 123456"
+          
